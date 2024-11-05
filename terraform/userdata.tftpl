@@ -6,8 +6,18 @@ gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 sudo apt update && sudo apt install vault
 # Create Vault configuration file
-cat <<CONFIG > /etc/vault.d/vault-config.hcl
-${data.template_file.vault_config.rendered}
+sudo mkdir -p /etc/vault.d
+cat <<CONFIG | sudo tee /etc/vault.d/vault-config.hcl > /dev/null
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = true
+}
+
+storage "inmem" {}
+
+ui = true
+
+disable_mlock = true
 CONFIG
 # Start Vault in dev mode (for testing only)
 sudo vault server -config=/etc/vault.d/vault-config.hcl | sudo tee /var/log/vault.log > /dev/null &
