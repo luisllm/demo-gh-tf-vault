@@ -5,20 +5,44 @@ wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/ke
 gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
 apt update && apt install -y vault
+
 # Create Vault configuration file
-mkdir -p /etc/vault.d
-cat <<CONFIG | tee /etc/vault.d/vault-config.hcl > /dev/null
+mkdir /opt/vault/etc
+cat <<EOF | tee /opt/vault/etc/vault.hcl > /dev/null
 listener "tcp" {
   address     = "0.0.0.0:8200"
   tls_disable = true
 }
-
 storage "inmem" {}
-
-ui = true
-
+ui            = true
 disable_mlock = true
-CONFIG
-# Start Vault
-sleep 5
-vault server -config=/etc/vault.d/vault-config.hcl | tee /var/log/vault.log > /dev/null &
+log_level     = "Info"
+disable_cache = true
+EOF
+
+# Create Systemd service file for Vault
+cat <<EOF | sudo tee /etc/systemd/system/vault.service > /dev/null
+[Unit]
+Description=HashiCorp Vault
+Documentation=https://www.vaultproject.io/docs/
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/vault server -config=/etc/vault.d/vault-config.hcl
+ExecReload=/bin/kill --signal HUP \$MAINPID
+KillMode=process
+Restart=on-failure
+LimitNOFILE=65536
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start Vault service
+chown -R vault:vault /opt/vault
+systemctl daemon-reload
+systemctl enable vault
+systemctl start vault
