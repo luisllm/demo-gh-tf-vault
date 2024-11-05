@@ -79,6 +79,14 @@ resource "aws_security_group" "vault_sg" {
     cidr_blocks = var.ingress_cidr_blocks
   }
 
+  # SSH access for EC2 Instance Connect IP range in eu-west-1
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["18.202.216.48/29"] # EC2 Instance Connect IP range for eu-west-1
+  }
+  
   egress {
     from_port   = 0
     to_port     = 0
