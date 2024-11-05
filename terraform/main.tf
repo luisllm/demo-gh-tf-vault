@@ -86,7 +86,7 @@ resource "aws_security_group" "vault_sg" {
     protocol    = "tcp"
     cidr_blocks = ["18.202.216.48/29"] # EC2 Instance Connect IP range for eu-west-1
   }
-  
+
   egress {
     from_port   = 0
     to_port     = 0
