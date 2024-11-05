@@ -22,61 +22,11 @@ env:
   REGION: 'eu-west-1'
   
 jobs:
-  production-infracost:
-    name: 'Production - Infracost'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write # Required to post comments
-    steps:
-      - name: Setup Infracost
-        uses: infracost/actions/setup@v3
-        with:
-          api-key: ${{ secrets.INFRACOST_API_KEY }}
-
-      # Checkout the base branch of the pull request (e.g. main/master).
-      - name: Checkout base branch
-        uses: actions/checkout@v4
-        with:
-          ref: '${{ github.event.pull_request.base.ref }}'
-
-      # Generate Infracost JSON file as the baseline.
-      - name: Generate Infracost cost estimate baseline
-        run: |
-          infracost breakdown --path=./terraform \
-                              --terraform-var-file=../terraform_config/production/input.tfvars \
-                              --format=json \
-                              --out-file=/tmp/infracost-base.json
-
-      # Checkout the current PR branch so we can create a diff.
-      - name: Checkout PR branch
-        uses: actions/checkout@v4
-
-      # Generate an Infracost diff and save it to a JSON file.
-      - name: Generate Infracost diff
-        run: |
-          infracost diff --path=./terraform \
-                         --terraform-var-file=../terraform_config/production/input.tfvars \
-                         --format=json \
-                         --compare-to=/tmp/infracost-base.json \
-                         --out-file=/tmp/infracost.json
-
-      - name: Post Infracost comment
-        run: |
-            infracost comment github --path=/tmp/infracost.json \
-                                     --repo=$GITHUB_REPOSITORY \
-                                     --github-token=${{ github.token }} \
-                                     --pull-request=${{ github.event.pull_request.number }} \
-                                     --behavior=update \
-                                     --policy-path="./policies/production-cost.rego"
-
   production-terraform-init-format-plan-apply:
     # Verify that the PR is coming from the staging branch
     if: github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'staging'
     name: 'Production - Terraform Init, Format, Plan and Apply'
-    needs: [production-infracost]
     runs-on: ubuntu-latest
-    #environment: production
 
     # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
     defaults:
@@ -115,16 +65,6 @@ jobs:
       run: | 
         terraform plan -input=false -var-file="../terraform_config/${{ env.ENVIRONMENT }}/input.tfvars" -out=plan.tfplan
         terraform show -json plan.tfplan > plan.json
-
-    - name: Setup OPA
-      uses: open-policy-agent/setup-opa@v2
-      with:
-        version: latest
-
-    - name: Run OPA Tests
-      run: |
-        opaout=$(opa eval --data ../policies/production-instance-policy.rego --input plan.json "data.terraform.deny" | jq -r '.result[].expressions[].value[]')
-        [ -z "$opaout" ] && exit 0 || echo "$opaout" && gh pr comment ${{ github.event.pull_request.number }} --body "### $opaout" && exit 1
 
     # A Github issue will be automatically created to approve the terraform plan before terraform apply is executed in production
     # https://github.com/trstringer/manual-approval

@@ -14,7 +14,7 @@ provider "aws" {
     tags = {
       Environment = var.environment
       Team        = "platform"
-      Project     = "gitops-2024"
+      Project     = "vault-demo"
     }
   }
 }

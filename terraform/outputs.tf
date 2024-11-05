@@ -1,3 +1,3 @@
-output "grafana_url" {
-  value = "http://${aws_eip.grafana_eip.public_ip}:3000"
+output "vault_url" {
+  value = "http://${aws_eip.vault_eip.public_ip}:8200"
 }

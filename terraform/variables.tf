@@ -65,7 +65,7 @@ variable "ami_owner" {
 }
 
 variable "ingress_cidr_blocks" {
-  description = "List of CIDR blocks that are allowed to access the security group on port 3000."
+  description = "List of CIDR blocks that are allowed to access the security group on port 8200."
   type        = list(string)
   default     = ["0.0.0.0/0"]
   validation {
