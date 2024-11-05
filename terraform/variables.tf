@@ -69,7 +69,7 @@ variable "ingress_cidr_blocks" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
   validation {
-    condition     = alltrue([for cidr in var.ingress_cidr_blocks : can(cidrsubnet(cidr, 8, 0))])
+    condition = alltrue([for cidr in var.ingress_cidr_blocks : can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[1-2][0-9]|3[0-2])$", cidr))])
     error_message = "Each value in ingress_cidr_blocks must be a valid CIDR notation (e.g., 0.0.0.0/0, 10.0.0.0/16)."
   }
 }
