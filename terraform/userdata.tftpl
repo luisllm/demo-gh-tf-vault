@@ -1,13 +1,13 @@
 #!/bin/bash
 # Install Vault
-sudo apt update && sudo apt install -y gpg wget
-wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+apt update && apt install -y gpg wget
+wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-sudo apt update && sudo apt install -y vault
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+apt update && apt install -y vault
 # Create Vault configuration file
-sudo mkdir -p /etc/vault.d
-cat <<CONFIG | sudo tee /etc/vault.d/vault-config.hcl > /dev/null
+mkdir -p /etc/vault.d
+cat <<CONFIG | tee /etc/vault.d/vault-config.hcl > /dev/null
 listener "tcp" {
   address     = "0.0.0.0:8200"
   tls_disable = true
@@ -20,4 +20,5 @@ ui = true
 disable_mlock = true
 CONFIG
 # Start Vault
-sudo vault server -config=/etc/vault.d/vault-config.hcl | sudo tee /var/log/vault.log > /dev/null &
+sleep 5
+vault server -config=/etc/vault.d/vault-config.hcl | tee /var/log/vault.log > /dev/null &
