@@ -8,7 +8,7 @@ apt update && apt install -y vault
 
 # Create Vault configuration file
 mkdir /opt/vault/etc
-cat <<EOF | tee /opt/vault/etc/vault.hcl > /dev/null
+cat <<EOF | tee /etc/vault.d/vault-config.hcl > /dev/null
 listener "tcp" {
   address     = "0.0.0.0:8200"
   tls_disable = true
