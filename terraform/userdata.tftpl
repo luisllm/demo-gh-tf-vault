@@ -7,21 +7,27 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashi
 apt update && apt install -y vault
 
 # Create Vault configuration file
-mkdir /opt/vault/etc
+mkdir /vault-storage
+chown -R vault:vault /vault-storage
 cat <<EOF | tee /etc/vault.d/vault-config.hcl > /dev/null
+storage "raft" {
+  path    = "/vault-storage"
+}
 listener "tcp" {
   address     = "0.0.0.0:8200"
+  cluster_address = "0.0.0.0:8201"
   tls_disable = true
 }
 seal "awskms" {
   region     = "${aws_region}"
   kms_key_id = "${kms_key}"
 }
-storage "inmem" {}
 ui            = true
 disable_mlock = true
 log_level     = "Info"
 disable_cache = true
+cluster_addr  = "http://127.0.0.1:8201"
+api_addr      = "https://127.0.0.1:8200"
 EOF
 
 # Create Systemd service file for Vault
