@@ -142,12 +142,12 @@ data "aws_iam_policy_document" "vault-policy" {
   }
 
   statement {
-    sid       = "ParameterStorePermissions"
-    effect    = "Allow"
+    sid    = "ParameterStorePermissions"
+    effect = "Allow"
     resources = [
       "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment}/vault/*"
     ]
-    actions   = [
+    actions = [
       "ssm:PutParameter",
       "ssm:GetParameter",
       "ssm:GetParameters",
