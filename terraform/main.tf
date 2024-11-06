@@ -74,19 +74,20 @@ resource "aws_security_group" "vault_sg" {
     cidr_blocks = var.ingress_cidr_blocks
   }
 
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = var.ingress_cidr_blocks
-  }
-
   # SSH access for EC2 Instance Connect IP range in eu-west-1
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["18.202.216.48/29"] # EC2 Instance Connect IP range for eu-west-1
+  }
+
+  # Allow inbound access to Vault from the dummy security group
+  ingress {
+    from_port       = 8200
+    to_port         = 8200
+    protocol        = "tcp"
+    security_groups = [aws_security_group.dummy_ec2_sg.id]
   }
 
   egress {
@@ -204,3 +205,66 @@ resource "aws_eip_association" "vault_eip_assoc" {
   allocation_id = aws_eip.vault_eip.id
 }
 
+########################################
+# EC2 dummy for testing Vault AWS Auth #
+########################################
+resource "aws_iam_role" "dummy_role" {
+  name = "${var.environment}-dummy-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect    = "Allow",
+        Principal = { Service = "ec2.amazonaws.com" },
+        Action    = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.environment}-dummy-role"
+  }
+}
+
+resource "aws_iam_instance_profile" "dummy_instance_profile" {
+  name = "${var.environment}-dummy-instance-profile"
+  role = aws_iam_role.dummy_role.name
+}
+
+resource "aws_security_group" "dummy_ec2_sg" {
+  name        = "${var.environment}_dummy_ec2_sg"
+  description = "Security group for dummy EC2 instance to allow SSH and Vault access"
+  vpc_id      = aws_vpc.vault_vpc.id
+
+  # SSH access for EC2 Instance Connect IP range in eu-west-1
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["18.202.216.48/29"] # EC2 Instance Connect IP range for eu-west-1
+  }
+
+  # Allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.environment}-dummy-ec2-sg"
+  }
+}
+
+resource "aws_instance" "vault_test_instance" {
+  ami                    = data.aws_ami.ubuntu.id # Replace with your AMI data source
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.vault_subnet.id
+  vpc_security_group_ids = [aws_security_group.dummy_ec2_sg.id]
+  iam_instance_profile   = aws_iam_instance_profile.dummy_instance_profile.id
+
+  tags = {
+    Name = "${var.environment}-vault-test-instance"
+  }
+}
