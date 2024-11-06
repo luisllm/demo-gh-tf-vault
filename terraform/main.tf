@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 data "aws_ami" "ubuntu" {
   most_recent = true
 
@@ -126,7 +128,7 @@ data "aws_iam_policy_document" "assume_role" {
   }
 }
 
-data "aws_iam_policy_document" "vault-kms-unseal" {
+data "aws_iam_policy_document" "vault-policy" {
   statement {
     sid       = "VaultKMSUnseal"
     effect    = "Allow"
@@ -138,30 +140,46 @@ data "aws_iam_policy_document" "vault-kms-unseal" {
       "kms:DescribeKey",
     ]
   }
+
+  statement {
+    sid       = "ParameterStorePermissions"
+    effect    = "Allow"
+    resources = [
+      "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment}/vault/*"
+    ]
+    actions   = [
+      "ssm:PutParameter",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+      "ssm:DeleteParameter"
+    ]
+  }
 }
 
-resource "aws_iam_role" "vault-kms-unseal-role" {
-  name               = "${var.environment}-vault-kms-role"
+resource "aws_iam_role" "vault-role" {
+  name               = "${var.environment}-vault-role"
   assume_role_policy = data.aws_iam_policy_document.assume_role.json
 }
 
-resource "aws_iam_role_policy" "vault-kms-unseal-policy" {
-  name   = "${var.environment}-vault-kms-policy"
-  role   = aws_iam_role.vault-kms-unseal-role.id
-  policy = data.aws_iam_policy_document.vault-kms-unseal.json
+resource "aws_iam_role_policy" "vault-role-policy" {
+  name   = "${var.environment}-vault-policy"
+  role   = aws_iam_role.vault-role.id
+  policy = data.aws_iam_policy_document.vault-policy.json
 }
 
-resource "aws_iam_instance_profile" "vault-kms-unseal" {
-  name = "${var.environment}-vault-kms-unseal-instance-profile"
-  role = aws_iam_role.vault-kms-unseal-role.name
+resource "aws_iam_instance_profile" "vault-instance-profile" {
+  name = "${var.environment}-vault-instance-profile"
+  role = aws_iam_role.vault-role.name
 }
 
 data "template_file" "vault" {
   template = file("userdata.tftpl")
 
   vars = {
-    kms_key    = aws_kms_key.vault.id
-    aws_region = var.region
+    kms_key     = aws_kms_key.vault.id
+    aws_region  = var.region
+    environment = var.environment
   }
 }
 
@@ -170,7 +188,7 @@ resource "aws_instance" "vault_server" {
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.vault_subnet.id
   vpc_security_group_ids = [aws_security_group.vault_sg.id]
-  iam_instance_profile   = aws_iam_instance_profile.vault-kms-unseal.id
+  iam_instance_profile   = aws_iam_instance_profile.vault-instance-profile.id
   #user_data              = file("userdata.tftpl")
   user_data = data.template_file.vault.rendered
 

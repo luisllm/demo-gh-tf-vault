@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install Vault
-apt update && apt install -y gpg wget
+apt update && apt install -y gpg wget jq
 wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
@@ -56,3 +56,21 @@ chown -R vault:vault /opt/vault
 systemctl daemon-reload
 systemctl enable vault
 systemctl start vault
+
+# Saving init data in Parameter Store
+ssm_put() {
+  aws ssm put-parameter \
+    --name "$${1}" \
+    --value "$${2}" \
+    --type SecureString \
+    --region ${aws_region} --overwrite 2>&1 > /dev/null
+}
+echo "initializing vault"
+export VAULT_ADDR=http://127.0.0.1:8200
+INIT=$(vault operator init -format=json)
+echo "Saving init data on ssm://${environment}/vault/root/init"
+ssm_put "${environment}/vault/root/init" "$INIT"
+ROOT_TOKEN="$(echo $INIT | jq .root_token -r)"
+export VAULT_TOKEN=$ROOT_TOKEN
+echo "Saving root token on ssm://${environment}/vault/root/token"
+ssm_put "${environment}/vault/root/token" "$ROOT_TOKEN"
