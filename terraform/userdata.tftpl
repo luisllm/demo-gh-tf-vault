@@ -58,6 +58,19 @@ systemctl enable vault
 systemctl start vault
 
 # Init Vault
+echo "waiting vault boot"
+echo ""
+while true
+do
+  STATUS=$(curl -s -o /dev/null -w '%%{http_code}' http://127.0.0.1:8200/v1/sys/seal-status)
+  if [ $STATUS -eq 200 ]; then
+    echo "Vault is online"
+    break
+  else
+    printf '.'
+  fi
+  sleep 2
+done
 # Saving init data in Parameter Store
 ssm_put() {
   aws ssm put-parameter \
@@ -69,7 +82,7 @@ ssm_put() {
 export VAULT_ADDR=http://127.0.0.1:8200
 STATUS=$(vault status -format=json)
 if [[ "$(echo $STATUS | jq .initialized)" == "false" ]]; then
-  echo "initializing vault"
+  echo "Initializing vault"
   INIT=$(vault operator init -format=json)
   echo "Saving init data on ssm://${environment}/vault/root/init"
   ssm_put "${environment}/vault/root/init" "$INIT"
