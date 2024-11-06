@@ -13,6 +13,10 @@ listener "tcp" {
   address     = "0.0.0.0:8200"
   tls_disable = true
 }
+seal "awskms" {
+  region     = "${aws_region}"
+  kms_key_id = "${kms_key}"
+}
 storage "inmem" {}
 ui            = true
 disable_mlock = true

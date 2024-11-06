@@ -104,12 +104,75 @@ resource "aws_eip" "vault_eip" {
   domain = "vpc"
 }
 
+# KMS Key that will be used to unseal Vault automatically
+resource "aws_kms_key" "vault" {
+  description             = "Vault unseal key"
+  deletion_window_in_days = 10
+
+  tags = {
+    Name = "${var.environment}-vault-kms-unseal"
+  }
+}
+
+data "aws_iam_policy_document" "assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "vault-kms-unseal" {
+  statement {
+    sid       = "VaultKMSUnseal"
+    effect    = "Allow"
+    resources = [aws_kms_key.vault.arn]
+
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:DescribeKey",
+    ]
+  }
+}
+
+resource "aws_iam_role" "vault-kms-unseal-role" {
+  name               = "${var.environment}-vault-kms-role"
+  assume_role_policy = data.aws_iam_policy_document.assume_role.json
+}
+
+resource "aws_iam_role_policy" "vault-kms-unseal-policy" {
+  name   = "${var.environment}-vault-kms-policy"
+  role   = aws_iam_role.vault-kms-unseal-role.id
+  policy = data.aws_iam_policy_document.vault-kms-unseal.json
+}
+
+resource "aws_iam_instance_profile" "vault-kms-unseal" {
+  name = "${var.environment}-vault-kms-unseal-instance-profile"
+  role = aws_iam_role.vault-kms-unseal-role.name
+}
+
+data "template_file" "vault" {
+  template = file("userdata.tftpl")
+
+  vars = {
+    kms_key    = aws_kms_key.vault.id
+    aws_region = var.region
+  }
+}
+
 resource "aws_instance" "vault_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.vault_subnet.id
   vpc_security_group_ids = [aws_security_group.vault_sg.id]
-  user_data              = file("userdata.tftpl")
+  iam_instance_profile   = aws_iam_instance_profile.vault-kms-unseal.id
+  #user_data              = file("userdata.tftpl")
+  user_data              = data.template_file.vault.rendered
 
   tags = {
     Name = "${var.environment}-vault"
