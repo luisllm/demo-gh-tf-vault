@@ -1,8 +1,13 @@
 # demo-gh-tf-vault
-This demo uses Terraform and Github Actions to automatically deploy two environments, staging and production, with an EC2 instance with Vault installed in it.
-Vault is automatically initialized and unseal using an AWS KMS key. The init info as well as the root token are stored in AWS Parameter Store.
 
-Once the workflow finishes, connect to the EC2 via Instance Connect and:
+This demo uses **Terraform** and **GitHub Actions** to automatically deploy two environments, staging and production, each with an EC2 instance with Vault installed.
+Vault is configured to:
+- Initialize and unseal automatically using an **AWS KMS key**.
+- Store initialization information, including the **root token**, securely in **AWS Parameter Store**.
+
+## Post-Deployment Instructions
+
+Once the GitHub Actions workflow completes, you can connect to the EC2 instance using **EC2 Instance Connect** and follow the steps below to verify the setup:
 - Verify Vault is running as a service:
 ```
 $ sudo systemctl status vault
@@ -77,10 +82,12 @@ http://<vault_ec2_public_IP>:8200/ui/
 
 # 1. Additional configs and tests
 
+This section demonstrates two test scenarios configured with Vault.
+
 ### Test 1 - Using Vault AWS Auth
 Vault can be configured to automatically generate AWS credentials for other AWS services like EC2s or Lambdas.
-To test this use case, the Terraform code also deploys a dummy EC2 with a dummy IAM Role attached to it. Vault is automatically configured to 
-Vault Secrets AWS 
+For this test, Terraform also deploys a dummy EC2 instance with a dummy IAM role that can authenticate to Vault.
+
 In Vault: 
 - Verify the AWS Auth method, and its config. In this example clients must send the `${environment}-vault.example.com` header, otherwise it won't work:
 ```
@@ -237,8 +244,9 @@ $ export AWS_SESSION_TOKEN=""
 $ aws s3 ls
 ```
 
-# 2. References
-https://prima.udemy.com/course/integrating-hashicorp-vault-with-aws
-https://github.com/btkrausen/hashicorp/
-https://patelsaheb.medium.com/setup-hashicorp-vault-on-aws-ec2-87d513b31b77
-https://github.com/giuliocalzolari/terraform-aws-vault-raft/blob/main/templates/userdata.tpl#L179
+## 2. References
+
+- [Vault with AWS on Udemy](https://www.udemy.com/course/integrating-hashicorp-vault-with-aws)
+- [HashiCorp Vault Examples on GitHub](https://github.com/btkrausen/hashicorp/)
+- [Guide to Setting Up Vault on AWS EC2](https://patelsaheb.medium.com/setup-hashicorp-vault-on-aws-ec2-87d513b31b77)
+- [Terraform AWS Vault Raft User Data Template](https://github.com/giuliocalzolari/terraform-aws-vault-raft/blob/main/templates/userdata.tpl#L179)
