@@ -142,6 +142,8 @@ data "aws_iam_policy_document" "vault-policy" {
     ]
   }
 
+  # Permissions needed so that we can create ParameterStore params for Vault init and the root token
+  # after initializating Vault
   statement {
     sid    = "ParameterStorePermissions"
     effect = "Allow"
@@ -154,6 +156,16 @@ data "aws_iam_policy_document" "vault-policy" {
       "ssm:GetParameters",
       "ssm:GetParametersByPath",
       "ssm:DeleteParameter"
+    ]
+  }
+
+  # Permissions needed to test Vault generating dynamic AWS credentials
+  statement {
+    sid       = "PermitAccessForAWSSecretsEngineAssumedRole"
+    effect    = "Allow"
+    resources = ["arn:aws:iam::632758144135:role/vault-s3-access-role"]
+    actions = [
+      "sts:AssumeRole"
     ]
   }
 }
@@ -175,7 +187,7 @@ resource "aws_iam_instance_profile" "vault-instance-profile" {
 }
 
 data "template_file" "vault" {
-  template = file("userdata.tftpl")
+  template = file("vault_ec2_userdata.tftpl")
 
   vars = {
     kms_key     = aws_kms_key.vault.id
@@ -190,8 +202,7 @@ resource "aws_instance" "vault_server" {
   subnet_id              = aws_subnet.vault_subnet.id
   vpc_security_group_ids = [aws_security_group.vault_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.vault-instance-profile.id
-  #user_data              = file("userdata.tftpl")
-  user_data = data.template_file.vault.rendered
+  user_data              = data.template_file.vault.rendered
 
   tags = {
     Name = "${var.environment}-vault"
@@ -204,6 +215,39 @@ resource "aws_eip_association" "vault_eip_assoc" {
   instance_id   = aws_instance.vault_server.id
   allocation_id = aws_eip.vault_eip.id
 }
+
+
+#######################################################################
+# IAM Role dummy for testing Vault dynamic AWS credentials generation #
+#######################################################################
+
+# IAM Role to Access S3
+resource "aws_iam_role" "vault_s3_access_role" {
+  name = "${var.environment}-vault-s3-access-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::632758144135:root"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.environment}-vault-s3-access-role"
+  }
+}
+
+# Attach the AmazonS3FullAccess managed policy to the role
+resource "aws_iam_role_policy_attachment" "vault_s3_access_policy" {
+  role       = aws_iam_role.vault_s3_access_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
 
 ########################################
 # EC2 dummy for testing Vault AWS Auth #
@@ -233,7 +277,7 @@ resource "aws_iam_instance_profile" "dummy_instance_profile" {
 
 resource "aws_security_group" "dummy_ec2_sg" {
   name        = "${var.environment}_dummy_ec2_sg"
-  description = "Security group for dummy EC2 instance to allow SSH and Vault access"
+  description = "Security group for dummy EC2 inqstance to allow SSH and Vault access"
   vpc_id      = aws_vpc.vault_vpc.id
 
   # SSH access for EC2 Instance Connect IP range in eu-west-1
@@ -257,12 +301,21 @@ resource "aws_security_group" "dummy_ec2_sg" {
   }
 }
 
+data "template_file" "dummy" {
+  template = file("dummy_ec2_userdata.tftpl")
+
+  vars = {
+    vault_server_private_ip = aws_instance.vault_server.private_ip
+  }
+}
+
 resource "aws_instance" "vault_test_instance" {
   ami                    = data.aws_ami.ubuntu.id # Replace with your AMI data source
   instance_type          = "t3.micro"
   subnet_id              = aws_subnet.vault_subnet.id
   vpc_security_group_ids = [aws_security_group.dummy_ec2_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.dummy_instance_profile.id
+  user_data              = data.template_file.dummy.rendered
 
   tags = {
     Name = "${var.environment}-vault-test-instance"

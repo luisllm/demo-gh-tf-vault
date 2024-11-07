@@ -37,7 +37,7 @@ api_addr      = "https://127.0.0.1:8200"
 EOF
 
 # Create Systemd service file for Vault
-cat <<EOF | sudo tee /etc/systemd/system/vault.service > /dev/null
+cat <<EOF | tee /etc/systemd/system/vault.service > /dev/null
 [Unit]
 Description=HashiCorp Vault
 Documentation=https://www.vaultproject.io/docs/
@@ -86,6 +86,7 @@ ssm_put() {
     --region ${aws_region} --overwrite 2>&1 > /dev/null
 }
 export VAULT_ADDR=http://127.0.0.1:8200
+echo 'export VAULT_ADDR="http://127.0.0.1:8200"' >> /etc/profile.d/vault.sh
 STATUS=$(vault status -format=json)
 if [[ "$(echo $STATUS | jq .initialized)" == "false" ]]; then
   echo "Initializing vault"
@@ -100,3 +101,35 @@ else
   echo "Vault already initialized"
   echo $STATUS
 fi
+
+# Test1 - Using Vault AWS Auth
+vault auth enable aws
+vault write auth/aws/config/client \
+  iam_server_id_header_value=${environment}-vault.example.com
+vault write auth/aws/role/test1 \
+  auth_type=iam \
+  token_ttl=15m \
+  max_ttl=1h \
+  policies=test1-ec2,test2-ec2 \
+  resolve_aws_unique_ids=false \
+  bound_iam_principal_arn=arn:aws:iam::632758144135:role/${environment}-dummy-role
+vault secrets enable kv-v2
+vault kv put kv-v2/test1/mysecret username=admin password=password123
+cat <<EOF | tee test1-ec2-policy.hcl > /dev/null
+path "kv-v2/data/test1/mysecret" {
+  capabilities = ["read", "list"]
+}
+EOF
+vault policy write test1-ec2 test1-ec2-policy.hcl
+
+# Test2 - Using Vault to generate dynamic AWS credentials for AWS
+vault secrets enable aws
+vault write aws/roles/s3_access \
+  role_arns=arn:aws:iam::632758144135:role/${environment}-vault-s3-access-role \
+  credential_type=assumed_role
+cat <<EOF | tee test2-ec2-policy.hcl > /dev/null
+path "aws/sts/s3_access" {
+  capabilities = ["update"]
+}
+EOF
+vault policy write test2-ec2 test2-ec2-policy.hcl
