@@ -28,7 +28,7 @@ Nov 06 15:22:05 ip-10-0-1-217 vault[388]: 2024-11-06T15:22:05.485Z [INFO]  stora
 Nov 06 15:22:05 ip-10-0-1-217 vault[388]: 2024-11-06T15:22:05.485Z [INFO]  core: usage gauge collection is disabled
 Nov 06 15:22:05 ip-10-0-1-217 vault[388]: 2024-11-06T15:22:05.563Z [INFO]  core: post-unseal setup complete
 ```
-- Verify Vault is initialized 
+- Verify Vault is initialized and unsealed:
 ```
 $ export VAULT_ADDR=http://127.0.0.1:8200
 $ vault status
@@ -52,8 +52,25 @@ Active Since             2024-11-06T15:22:05.563977358Z
 Raft Committed Index     282
 Raft Applied Index       282
 ```
+- Login with the root token. Get the token from Parameter Store:
+```
+$ vault login
+Token (will be hidden): 
+Success! You are now authenticated. The token information displayed below
+is already stored in the token helper. You do NOT need to run "vault login"
+again. Future Vault requests will automatically use this token.
 
-- Access the Vault UI: 
+Key                  Value
+---                  -----
+token                <token>
+token_accessor       <token_accessor>
+token_duration       ∞
+token_renewable      false
+token_policies       ["root"]
+identity_policies    []
+policies             ["root"]
+```
+- Access the Vault UI with the root token: 
 ```
 http://<vault_ec2_public_IP>:8200/ui/
 ```
@@ -64,15 +81,14 @@ http://<vault_ec2_public_IP>:8200/ui/
 Vault can be configured to automatically generate AWS credentials for other AWS services like EC2s or Lambdas.
 To test this use case, the Terraform code also deploys a dummy EC2 with a dummy IAM Role attached to it. Vault is automatically configured to 
 Vault Secrets AWS 
-In Vault:
-- Enable AWS Auth:
+In Vault: 
+- Verify the AWS Auth method, and its config. In this example clients must send the `${environment}-vault.example.com` header, otherwise it won't work:
 ```
-$ vault auth enable aws
-```
-- Configure AWS Auth. In this example clients must send the `${environment}-vault.example.com` header, otherwise it won't work:
-```
-$ vault write auth/aws/config/client \
-  iam_server_id_header_value=staging-vault.example.com
+$ vault auth list
+Path      Type     Accessor               Description                Version
+----      ----     --------               -----------                -------
+aws/      aws      auth_aws_d0f2146e      n/a                        n/a
+token/    token    auth_token_012dfc42    token based credentials    n/a
 
 $ vault read auth/aws/config/client
 Key                           Value
@@ -81,7 +97,7 @@ access_key                    n/a
 allowed_sts_header_values     <nil>
 endpoint                      n/a
 iam_endpoint                  n/a
-iam_server_id_header_value    vault.example.com
+iam_server_id_header_value    staging-vault.example.com
 identity_token_audience       n/a
 identity_token_ttl            0s
 max_retries                   -1
@@ -90,18 +106,9 @@ sts_endpoint                  n/a
 sts_region                    n/a
 use_sts_region_from_client    false
 ```
-- Create a Role and bound it to the dummy IAM Role used by the dummy EC2. Also link the Role to a Vault policy:
+- Verify the Vault Role which is bound it to the dummy IAM Role used by the dummy EC2, and is also linked to a Vault policy:
 ```
-$ vault write auth/aws/role/test \
-  auth_type=iam \
-  token_ttl=15m \
-  max_ttl=1h \
-  policies=test-ec2 \
-  resolve_aws_unique_ids=false \
-  bound_iam_principal_arn=arn:aws:iam::632758144135:role/staging-dummy-role
-Success! Data written to: auth/aws/role/test
-
-$ vault read auth/aws/role/test
+$ vault read auth/aws/role/test1
 Key                               Value
 ---                               -----
 allow_instance_migration          false
@@ -120,9 +127,9 @@ disallow_reauthentication         false
 inferred_aws_region               n/a
 inferred_entity_type              n/a
 max_ttl                           1h
-policies                          [test-ec2]
+policies                          [test1-ec2 test2-ec2]
 resolve_aws_unique_ids            false
-role_id                           800a2b07-7fd9-aacc-f1da-f4151ee37713
+role_id                           7816faf0-27e0-fe27-2453-69bfab203eac
 role_tag                          n/a
 token_bound_cidrs                 []
 token_explicit_max_ttl            0s
@@ -130,45 +137,52 @@ token_max_ttl                     1h
 token_no_default_policy           false
 token_num_uses                    0
 token_period                      0s
-token_policies                    [test-ec2]
+token_policies                    [test1-ec2 test2-ec2]
 token_ttl                         15m
 token_type                        default
 ```
 
-- Enable kv-v2 secrets engine and create a test secret:
+- Verify kv-v2 secrets engine is enabled and the test secret was created:
 ```
-$ vault secrets enable kv-v2
-Success! Enabled the kv-v2 secrets engine at: kv-v2/
+$ vault secrets list
+Path          Type         Accessor              Description
+----          ----         --------              -----------
+aws/          aws          aws_46ad58a7          n/a
+cubbyhole/    cubbyhole    cubbyhole_45d37457    per-token private secret storage
+identity/     identity     identity_4254d29c     identity store
+kv-v2/        kv           kv_af356f23           n/a
+sys/          system       system_3d9042e9       system endpoints used for control, policy and debugging
 
-$ vault kv put kv-v2/test/mysecret username=admin password=password123
+$ vault kv get kv-v2/test1/mysecret
 ====== Secret Path ======
-kv-v2/data/test/mysecret
+kv-v2/data/test1/mysecret
 
 ======= Metadata =======
 Key                Value
 ---                -----
-created_time       2024-11-06T20:12:07.224866085Z
+created_time       2024-11-07T10:10:14.98417707Z
 custom_metadata    <nil>
 deletion_time      n/a
 destroyed          false
 version            1
+
+====== Data ======
+Key         Value
+---         -----
+password    password123
+username    admin
 ```
-- Create the policy to allow read and list the kv-v2 secret created above:
+- Verify the policy was created to allow read and list the kv-v2 secret created above:
 ```
-$ cat test-ec2-policy.hcl 
-path "kv-v2/data/test/mysecret" {
+$ vault policy read test1-ec2
+path "kv-v2/data/test1/mysecret" {
   capabilities = ["read", "list"]
 }
-
-$ vault policy write test-ec2 test-ec2-policy.hcl 
-Success! Uploaded policy: test-ec2
 ```
 
 In the dummy EC2:
 - Test you can authenticate and get the secret:
 ```
-$ export VAULT_ADDR="http://<vault_server_private_ip>:8200"
-
 $ vault login -method=aws role="test1" header_value="staging-vault.example.com"
 
 $ vault kv get kv-v2/test1/mysecret
@@ -179,17 +193,38 @@ Vault can be configured to automatically generate AWS credentials related to ano
 In this way, someone or something, can ask for AWS credentials to perform whatever is allowed by the other AWS Role that is being assumed.
 
 In Vault:
-- Enable AWS secrets engine:
+- Verify AWS secrets engine was enabled:
 ```
-$ vault secrets enable aws
+$ vault secrets list
+Path          Type         Accessor              Description
+----          ----         --------              -----------
+aws/          aws          aws_46ad58a7          n/a
+cubbyhole/    cubbyhole    cubbyhole_45d37457    per-token private secret storage
+identity/     identity     identity_4254d29c     identity store
+kv-v2/        kv           kv_af356f23           n/a
+sys/          system       system_3d9042e9       system endpoints used for control, policy and debugging
 ```
-- Create Vault iam role with permissions to assume the other role
-The dummy role `arn:aws:iam::632758144135:role/vault-s3-access-role` is created by Terraform and it allows S3 read access.
+- Verify the Vault iam role with permissions to assume the other role
+The dummy role `arn:aws:iam::632758144135:role/vault-s3-access-role` is created by Terraform and it allows S3 full access.
 ```
-$ vault write aws/roles/s3_access \
-  role_arns=arn:aws:iam::632758144135:role/vault-s3-access-role \
-  credential_type=assumed_role
+$ vault read aws/roles/s3_access
+Key                         Value
+---                         -----
+credential_type             assumed_role
+default_sts_ttl             0s
+external_id                 n/a
+iam_groups                  <nil>
+iam_tags                    <nil>
+max_sts_ttl                 0s
+mfa_serial_number           n/a
+permissions_boundary_arn    n/a
+policy_arns                 <nil>
+policy_document             n/a
+role_arns                   [arn:aws:iam::632758144135:role/staging-vault-s3-access-role]
+session_tags                <nil>
+user_path                   n/a
 ```
+In the dummy EC2:
 - Ask for credentials:
 ```
 $ vault write aws/sts/s3_access -ttl=60m
@@ -202,7 +237,7 @@ $ export AWS_SESSION_TOKEN=""
 $ aws s3 ls
 ```
 
-# 1. References
+# 2. References
 https://prima.udemy.com/course/integrating-hashicorp-vault-with-aws
 https://github.com/btkrausen/hashicorp/
 https://patelsaheb.medium.com/setup-hashicorp-vault-on-aws-ec2-87d513b31b77

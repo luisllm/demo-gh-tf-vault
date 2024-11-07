@@ -163,7 +163,7 @@ data "aws_iam_policy_document" "vault-policy" {
   statement {
     sid       = "PermitAccessForAWSSecretsEngineAssumedRole"
     effect    = "Allow"
-    resources = ["arn:aws:iam::632758144135:role/vault-s3-access-role"]
+    resources = ["arn:aws:iam::632758144135:role/${var.environment}-vault-s3-access-role"]
     actions = [
       "sts:AssumeRole"
     ]
