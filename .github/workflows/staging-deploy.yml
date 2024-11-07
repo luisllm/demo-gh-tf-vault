@@ -8,7 +8,6 @@ on:
       - 'terraform/**'
       - 'terraform_config/staging/**'
       - '.github/workflows/staging-deploy.yml'
-  workflow_dispatch:
     
 permissions:
   contents: read
