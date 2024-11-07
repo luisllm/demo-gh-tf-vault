@@ -249,9 +249,9 @@ resource "aws_iam_role_policy_attachment" "vault_s3_access_policy" {
 }
 
 
-########################################
-# EC2 dummy for testing Vault AWS Auth #
-########################################
+#########################
+# EC2 dummy for testing #
+#########################
 resource "aws_iam_role" "dummy_role" {
   name = "${var.environment}-dummy-role"
   assume_role_policy = jsonencode({
