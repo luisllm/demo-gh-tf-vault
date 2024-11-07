@@ -12,6 +12,14 @@ resource "aws_security_group" "rds_sg" {
     security_groups = [aws_security_group.dummy_ec2_sg.id]
   }
 
+  # Allow MySQL access from Vault EC2 security group
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.vault_sg.id]
+  }
+
   # Allow outbound traffic
   egress {
     from_port   = 0
@@ -42,8 +50,8 @@ resource "aws_db_instance" "mysql" {
   allocated_storage      = 5
   engine                 = "mysql"
   engine_version         = "8.0"
-  username               = "admin"
-  password               = "admin123"
+  username               = var.rds_username
+  password               = var.rds_password
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   publicly_accessible    = false

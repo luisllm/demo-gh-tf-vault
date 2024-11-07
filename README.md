@@ -244,6 +244,50 @@ $ export AWS_SESSION_TOKEN=""
 $ aws s3 ls
 ```
 
+### Test 3 - Database secrets engine
+Vault can be configured to automatically generate database credentials.
+
+In Vault:
+- Verify Database secrets engine was enabled:
+``` 
+$ vault secrets list
+Path          Type         Accessor              Description
+----          ----         --------              -----------
+aws/          aws          aws_4a6c9111          n/a
+cubbyhole/    cubbyhole    cubbyhole_e87f80cc    per-token private secret storage
+identity/     identity     identity_995c83b1     identity store
+kv-v2/        kv           kv_058c151c           n/a
+mysql/        database     database_0ee177ea     n/a
+sys/          system       system_a6dfa037       system endpoints used for control, policy and debugging
+```
+- Verify the database config is in place:
+```
+$ vault read mysql/config/mysql-database
+Key                                   Value
+---                                   -----
+allowed_roles                         [advanced]
+connection_details                    map[connection_url:{{username}}:{{password}}@tcp(staging-mysql-db.ccngm6ktky9t.eu-west-1.rds.amazonaws.com:3306)/ username:admin]
+password_policy                       n/a
+plugin_name                           mysql-rds-database-plugin
+plugin_version                        n/a
+root_credentials_rotate_statements    []
+verify_connection                     true
+```
+- Verify the Vault role is created:
+```
+$ vault read mysql/roles/advanced
+Key                      Value
+---                      -----
+creation_statements      [CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';GRANT SELECT ON *.* TO '{{name}}'@'%';]
+credential_type          password
+db_name                  mysql-database
+default_ttl              1h
+max_ttl                  24h
+renew_statements         []
+revocation_statements    []
+rollback_statements      []
+```
+
 ## 2. References
 
 - [Vault with AWS on Udemy](https://www.udemy.com/course/integrating-hashicorp-vault-with-aws)

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install Vault CLI
-apt update && apt install -y unzip
+apt update && apt install -y unzip mysql-client
 curl -O https://releases.hashicorp.com/vault/1.18.1/vault_1.18.1_linux_amd64.zip
 unzip vault_1.18.1_linux_amd64.zip
 mv vault /usr/local/bin/

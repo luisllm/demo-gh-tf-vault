@@ -207,9 +207,12 @@ data "template_file" "vault" {
   template = file("vault_ec2_userdata.tftpl")
 
   vars = {
-    kms_key     = aws_kms_key.vault.id
-    aws_region  = var.region
-    environment = var.environment
+    kms_key      = aws_kms_key.vault.id
+    aws_region   = var.region
+    environment  = var.environment
+    rds_endpoint = aws_db_instance.mysql.endpoint
+    rds_username = var.rds_username
+    rds_password = var.rds_password
   }
 }
 

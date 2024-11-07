@@ -83,3 +83,16 @@ variable "ingress_cidr_blocks" {
     error_message = "Each value in ingress_cidr_blocks must be a valid CIDR notation (e.g., 0.0.0.0/0, 10.0.0.0/16)."
   }
 }
+
+variable "rds_username" {
+  description = "Master username for the RDS database."
+  type        = string
+  default     = "admin"
+}
+
+variable "rds_password" {
+  description = "Master password for the RDS database."
+  type        = string
+  default     = "admin123"
+  sensitive   = true
+}
