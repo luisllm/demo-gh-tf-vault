@@ -25,6 +25,16 @@ resource "aws_security_group" "rds_sg" {
   }
 }
 
+# RDS Subnet Group with Multiple Subnets for AZ Coverage
+resource "aws_db_subnet_group" "rds_subnet_group" {
+  name       = "${var.environment}-rds-subnet-group"
+  subnet_ids = [aws_subnet.vault_subnet_a.id, aws_subnet.vault_subnet_b.id]
+
+  tags = {
+    Name = "${var.environment}-rds-subnet-group"
+  }
+}
+
 # RDS MySQL Instance
 resource "aws_db_instance" "mysql" {
   identifier             = "${var.environment}-mysql-db"
@@ -38,18 +48,9 @@ resource "aws_db_instance" "mysql" {
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   publicly_accessible    = false
   skip_final_snapshot    = true
+  multi_az               = false # Ensures single-AZ deployment
 
   tags = {
     Name = "${var.environment}-mysql-db"
-  }
-}
-
-# RDS Subnet Group for the RDS Instance
-resource "aws_db_subnet_group" "rds_subnet_group" {
-  name       = "${var.environment}-rds-subnet-group"
-  subnet_ids = [aws_subnet.vault_subnet.id]
-
-  tags = {
-    Name = "${var.environment}-rds-subnet-group"
   }
 }

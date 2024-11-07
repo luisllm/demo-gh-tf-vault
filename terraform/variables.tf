@@ -38,10 +38,20 @@ variable "vpc_cidr_block" {
   }
 }
 
-variable "subnet_cidr_block" {
-  description = "The CIDR block for the subnet"
+variable "subnet_a_cidr_block" {
+  description = "The CIDR block for the subnet_a"
   type        = string
   default     = "10.0.1.0/24"
+  validation {
+    condition     = can(cidrsubnet(var.subnet_cidr_block, 8, 0))
+    error_message = "The subnet CIDR block must be a valid CIDR notation (e.g., 10.0.1.0/24)."
+  }
+}
+
+variable "subnet_b_cidr_block" {
+  description = "The CIDR block for the subnet_b"
+  type        = string
+  default     = "10.0.2.0/24"
   validation {
     condition     = can(cidrsubnet(var.subnet_cidr_block, 8, 0))
     error_message = "The subnet CIDR block must be a valid CIDR notation (e.g., 10.0.1.0/24)."

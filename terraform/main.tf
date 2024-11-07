@@ -47,18 +47,35 @@ resource "aws_route_table" "vault_rt" {
   }
 }
 
-resource "aws_subnet" "vault_subnet" {
+resource "aws_subnet" "vault_subnet_a" {
   vpc_id                  = aws_vpc.vault_vpc.id
-  cidr_block              = var.subnet_cidr_block
+  cidr_block              = var.subnet_a_cidr_block
+  availability_zone       = "eu-west-1a"
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "${var.environment}-vault-subnet"
+    Name = "${var.environment}-vault-subnet-a"
   }
 }
 
-resource "aws_route_table_association" "vault_rta" {
-  subnet_id      = aws_subnet.vault_subnet.id
+resource "aws_subnet" "vault_subnet_b" {
+  vpc_id                  = aws_vpc.vault_vpc.id
+  cidr_block              = var.subnet_b_cidr_block
+  availability_zone       = "eu-west-1b"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "${var.environment}-vault-subnet-b"
+  }
+}
+
+resource "aws_route_table_association" "vault_rta_a" {
+  subnet_id      = aws_subnet.vault_subnet_a.id
+  route_table_id = aws_route_table.vault_rt.id
+}
+
+resource "aws_route_table_association" "vault_rta_b" {
+  subnet_id      = aws_subnet.vault_subnet_b.id
   route_table_id = aws_route_table.vault_rt.id
 }
 
@@ -199,7 +216,7 @@ data "template_file" "vault" {
 resource "aws_instance" "vault_server" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
-  subnet_id              = aws_subnet.vault_subnet.id
+  subnet_id              = aws_subnet.vault_subnet_a.id
   vpc_security_group_ids = [aws_security_group.vault_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.vault-instance-profile.id
   user_data              = data.template_file.vault.rendered
@@ -312,7 +329,7 @@ data "template_file" "dummy" {
 resource "aws_instance" "vault_test_instance" {
   ami                    = data.aws_ami.ubuntu.id # Replace with your AMI data source
   instance_type          = "t3.micro"
-  subnet_id              = aws_subnet.vault_subnet.id
+  subnet_id              = aws_subnet.vault_subnet_a.id
   vpc_security_group_ids = [aws_security_group.dummy_ec2_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.dummy_instance_profile.id
   user_data              = data.template_file.dummy.rendered
