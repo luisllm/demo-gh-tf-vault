@@ -1,0 +1,135 @@
+#!/bin/bash
+# Install Vault
+apt update && apt install -y gpg wget jq unzip
+wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+apt update && apt install -y vault
+
+# Install AWS CLI
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+./aws/install
+rm -rf awscliv2.zip aws/
+
+# Create Vault configuration file
+mkdir /vault-storage
+chown -R vault:vault /vault-storage
+cat <<EOF | tee /etc/vault.d/vault-config.hcl > /dev/null
+storage "raft" {
+  path    = "/vault-storage"
+}
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  cluster_address = "0.0.0.0:8201"
+  tls_disable = true
+}
+seal "awskms" {
+  region     = "${aws_region}"
+  kms_key_id = "${kms_key}"
+}
+ui            = true
+disable_mlock = true
+log_level     = "Info"
+disable_cache = true
+cluster_addr  = "http://127.0.0.1:8201"
+api_addr      = "https://127.0.0.1:8200"
+EOF
+
+# Create Systemd service file for Vault
+cat <<EOF | tee /etc/systemd/system/vault.service > /dev/null
+[Unit]
+Description=HashiCorp Vault
+Documentation=https://www.vaultproject.io/docs/
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/vault server -config=/etc/vault.d/vault-config.hcl
+ExecReload=/bin/kill --signal HUP \$MAINPID
+KillMode=process
+Restart=on-failure
+LimitNOFILE=65536
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start Vault service
+chown -R vault:vault /opt/vault
+systemctl daemon-reload
+systemctl enable vault
+systemctl start vault
+
+# Init Vault
+echo "waiting vault boot"
+echo ""
+while true
+do
+  STATUS=$(curl -s -o /dev/null -w '%%{http_code}' http://127.0.0.1:8200/v1/sys/seal-status)
+  if [ $STATUS -eq 200 ]; then
+    echo "Vault is online"
+    break
+  else
+    printf '.'
+  fi
+  sleep 2
+done
+# Saving init data in Parameter Store
+ssm_put() {
+  aws ssm put-parameter \
+    --name "$${1}" \
+    --value "$${2}" \
+    --type SecureString \
+    --region ${aws_region} --overwrite 2>&1 > /dev/null
+}
+export VAULT_ADDR=http://127.0.0.1:8200
+echo 'export VAULT_ADDR="http://127.0.0.1:8200"' >> /etc/profile.d/vault.sh
+STATUS=$(vault status -format=json)
+if [[ "$(echo $STATUS | jq .initialized)" == "false" ]]; then
+  echo "Initializing vault"
+  INIT=$(vault operator init -format=json)
+  echo "Saving init data on ssm://${environment}/vault/root/init"
+  ssm_put "/${environment}/vault/root/init" "$INIT"
+  ROOT_TOKEN="$(echo $INIT | jq .root_token -r)"
+  export VAULT_TOKEN=$ROOT_TOKEN
+  echo "Saving root token on ssm://${environment}/vault/root/token"
+  ssm_put "/${environment}/vault/root/token" "$ROOT_TOKEN"
+else
+  echo "Vault already initialized"
+  echo $STATUS
+fi
+
+# Test1 - Using Vault AWS Auth
+vault auth enable aws
+vault write auth/aws/config/client \
+  iam_server_id_header_value=${environment}-vault.example.com
+vault write auth/aws/role/test1 \
+  auth_type=iam \
+  token_ttl=15m \
+  max_ttl=1h \
+  policies=test1-ec2,test2-ec2 \
+  resolve_aws_unique_ids=false \
+  bound_iam_principal_arn=arn:aws:iam::632758144135:role/${environment}-dummy-role
+vault secrets enable kv-v2
+vault kv put kv-v2/test1/mysecret username=admin password=password123
+cat <<EOF | tee test1-ec2-policy.hcl > /dev/null
+path "kv-v2/data/test1/mysecret" {
+  capabilities = ["read", "list"]
+}
+EOF
+vault policy write test1-ec2 test1-ec2-policy.hcl
+
+# Test2 - Using Vault to generate dynamic AWS credentials for AWS
+vault secrets enable aws
+vault write aws/roles/s3_access \
+  role_arns=arn:aws:iam::632758144135:role/${environment}-vault-s3-access-role \
+  credential_type=assumed_role
+cat <<EOF | tee test2-ec2-policy.hcl > /dev/null
+path "aws/sts/s3_access" {
+  capabilities = ["update"]
+}
+EOF
+vault policy write test2-ec2 test2-ec2-policy.hcl
