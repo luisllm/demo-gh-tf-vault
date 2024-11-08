@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install Vault
-apt update && apt install -y gpg wget jq unzip
+apt update && apt install -y gpg wget jq unzip mysql-client
 wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
@@ -110,7 +110,7 @@ vault write auth/aws/role/test1 \
   auth_type=iam \
   token_ttl=15m \
   max_ttl=1h \
-  policies=test1-ec2,test2-ec2 \
+  policies=test1-ec2,test2-ec2,test3-ec2 \
   resolve_aws_unique_ids=false \
   bound_iam_principal_arn=arn:aws:iam::632758144135:role/${environment}-dummy-role
 vault secrets enable kv-v2
@@ -133,3 +133,30 @@ path "aws/sts/s3_access" {
 }
 EOF
 vault policy write test2-ec2 test2-ec2-policy.hcl
+
+# Test3 - Vault database secrets engine
+echo "Waiting for RDS to be available..."
+while ! mysql -h "${rds_endpoint}" -P 3306 -u "${rds_username}" -p"${rds_password}" -e "SELECT 1;" &>/dev/null; do
+  echo "RDS is not yet available. Retrying in 10 seconds..."
+  sleep 10
+done
+echo "RDS is available. Proceeding with Vault configuration."
+vault secrets enable -path=mysql database
+vault write mysql/config/mysql-database \
+  plugin_name=mysql-rds-database-plugin \
+  connection_url="{{username}}:{{password}}@tcp(${rds_endpoint})/" \
+  allowed_roles="advanced" \
+  username="${rds_username}" \
+  password="${rds_password}"
+vault write mysql/roles/advanced \
+  db_name=mysql-database \
+  creation_statements="CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';GRANT SELECT ON *.* TO '{{name}}'@'%';" \
+  default_ttl="1h" \
+  max_ttl="24h"
+cat <<EOF | tee test3-ec2-policy.hcl > /dev/null
+path "mysql/creds/advanced" {
+  capabilities = ["read"]
+}
+EOF
+vault policy write test3-ec2 test3-ec2-policy.hcl
+vault write -f mysql/rotate-root/mysql-database

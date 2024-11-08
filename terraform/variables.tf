@@ -38,12 +38,22 @@ variable "vpc_cidr_block" {
   }
 }
 
-variable "subnet_cidr_block" {
-  description = "The CIDR block for the subnet"
+variable "subnet_a_cidr_block" {
+  description = "The CIDR block for the subnet_a"
   type        = string
   default     = "10.0.1.0/24"
   validation {
-    condition     = can(cidrsubnet(var.subnet_cidr_block, 8, 0))
+    condition     = can(cidrsubnet(var.subnet_a_cidr_block, 8, 0))
+    error_message = "The subnet CIDR block must be a valid CIDR notation (e.g., 10.0.1.0/24)."
+  }
+}
+
+variable "subnet_b_cidr_block" {
+  description = "The CIDR block for the subnet_b"
+  type        = string
+  default     = "10.0.2.0/24"
+  validation {
+    condition     = can(cidrsubnet(var.subnet_b_cidr_block, 8, 0))
     error_message = "The subnet CIDR block must be a valid CIDR notation (e.g., 10.0.1.0/24)."
   }
 }
@@ -72,4 +82,17 @@ variable "ingress_cidr_blocks" {
     condition     = alltrue([for cidr in var.ingress_cidr_blocks : can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[1-2][0-9]|3[0-2])$", cidr))])
     error_message = "Each value in ingress_cidr_blocks must be a valid CIDR notation (e.g., 0.0.0.0/0, 10.0.0.0/16)."
   }
+}
+
+variable "rds_username" {
+  description = "Master username for the RDS database."
+  type        = string
+  default     = "admin"
+}
+
+variable "rds_password" {
+  description = "Master password for the RDS database."
+  type        = string
+  default     = "admin123"
+  sensitive   = true
 }
