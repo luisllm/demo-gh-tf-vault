@@ -135,13 +135,19 @@ EOF
 vault policy write test2-ec2 test2-ec2-policy.hcl
 
 # Test3 - Vault database secrets engine
+echo "Waiting for RDS to be available..."
+while ! mysql -h "${rds_endpoint}" -u "${rds_username}" -p"${rds_password}" -e "SELECT 1;" &>/dev/null; do
+  echo "RDS is not yet available. Retrying in 10 seconds..."
+  sleep 10
+done
+echo "RDS is available. Proceeding with Vault configuration."
 vault secrets enable -path=mysql database
 vault write mysql/config/mysql-database \
   plugin_name=mysql-rds-database-plugin \
-  connection_url="{{username}}:{{password}}@tcp(${rds_endpoint}:3306)/" \
+  connection_url="{{username}}:{{password}}@tcp(${rds_endpoint})/" \
   allowed_roles="advanced" \
   username="${rds_username}" \
-  password="${rds_password}
+  password="${rds_password}"
 vault write mysql/roles/advanced \
   db_name=mysql-database \
   creation_statements="CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';GRANT SELECT ON *.* TO '{{name}}'@'%';" \
