@@ -110,7 +110,7 @@ vault write auth/aws/role/test1 \
   auth_type=iam \
   token_ttl=15m \
   max_ttl=1h \
-  policies=test1-ec2,test2-ec2 \
+  policies=test1-ec2,test2-ec2,test3-ec2 \
   resolve_aws_unique_ids=false \
   bound_iam_principal_arn=arn:aws:iam::632758144135:role/${environment}-dummy-role
 vault secrets enable kv-v2
@@ -147,4 +147,10 @@ vault write mysql/roles/advanced \
   creation_statements="CREATE USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';GRANT SELECT ON *.* TO '{{name}}'@'%';" \
   default_ttl="1h" \
   max_ttl="24h"
+cat <<EOF | tee test3-ec2-policy.hcl > /dev/null
+path "mysql/creds/advanced" {
+  capabilities = ["read"]
+}
+EOF
+vault policy write test3-ec2 test3-ec2-policy.hcl
 vault write -f mysql/rotate-root/mysql-database

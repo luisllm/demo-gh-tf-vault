@@ -82,7 +82,7 @@ http://<vault_ec2_public_IP>:8200/ui/
 
 # 1. Additional configs and tests
 
-This section demonstrates two test scenarios configured with Vault.
+This section demonstrates three test scenarios configured with Vault.
 
 ### Test 1 - Using Vault AWS Auth
 Vault can be configured to automatically generate AWS credentials for other AWS services like EC2s or Lambdas.
@@ -113,7 +113,8 @@ sts_endpoint                  n/a
 sts_region                    n/a
 use_sts_region_from_client    false
 ```
-- Verify the Vault Role which is bound it to the dummy IAM Role used by the dummy EC2, and is also linked to a Vault policy:
+- Verify the Vault Role which is bound it to the dummy IAM Role used by the dummy EC2, and is also linked to a Vault policy.
+Note that `test2-ec2` and `test3-ec2` policies are needed for next tests.
 ```
 $ vault read auth/aws/role/test1
 Key                               Value
@@ -134,7 +135,7 @@ disallow_reauthentication         false
 inferred_aws_region               n/a
 inferred_entity_type              n/a
 max_ttl                           1h
-policies                          [test1-ec2 test2-ec2]
+policies                          [test1-ec2 test2-ec2 test3-ec2]
 resolve_aws_unique_ids            false
 role_id                           7816faf0-27e0-fe27-2453-69bfab203eac
 role_tag                          n/a
@@ -144,7 +145,7 @@ token_max_ttl                     1h
 token_no_default_policy           false
 token_num_uses                    0
 token_period                      0s
-token_policies                    [test1-ec2 test2-ec2]
+token_policies                    [test1-ec2 test2-ec2 test3-ec2]
 token_ttl                         15m
 token_type                        default
 ```
@@ -232,8 +233,10 @@ session_tags                <nil>
 user_path                   n/a
 ```
 In the dummy EC2:
-- Ask for credentials:
+- Test you can authenticate and ask for credentials:
 ```
+$ vault login -method=aws role="test1" header_value="staging-vault.example.com"
+
 $ vault write aws/sts/s3_access -ttl=60m
 ```
 - The command above will give you some AWS credentials. For testing, export them to the following variables and test the s3 access:
@@ -246,7 +249,10 @@ $ aws s3 ls
 
 ### Test 3 - Database secrets engine
 Vault can be configured to automatically generate database credentials.
-
+Note that the RDS admin username and password hardcoded in the Terraform code will be automatically changed by Vault by running the following as part of the userdata:
+```
+$ vault write -f mysql/rotate-root/mysql-database
+```
 In Vault:
 - Verify Database secrets engine was enabled:
 ``` 
@@ -286,6 +292,47 @@ max_ttl                  24h
 renew_statements         []
 revocation_statements    []
 rollback_statements      []
+```
+In the dummy EC2:
+- Test you can authenticate and ask for DB credentials:
+```
+$ vault login -method=aws role="test1" header_value="staging-vault.example.com"
+
+$ vault read mysql/creds/advanced
+Key                Value
+---                -----
+lease_id           mysql/creds/advanced/JelCRu2C7Nw7OvEzvuBKnLBs
+lease_duration     1h
+lease_renewable    true
+password           <password>
+username           v-adva-kbNy8340A
+```
+- Connect to the DB using those credentials:
+```
+$ mysql -h staging-mysql-db.ccngm6ktky9t.eu-west-1.rds.amazonaws.com -u v-adva-kbNy8340A -p
+Enter password: 
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 13
+Server version: 8.0.39 Source distribution
+
+Copyright (c) 2000, 2024, Oracle and/or its affiliates.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> SHOW DATABASES;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+4 rows in set (0.00 sec)
 ```
 
 ## 2. References
