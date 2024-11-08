@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install Vault
-apt update && apt install -y gpg wget jq unzip
+apt update && apt install -y gpg wget jq unzip mysql-client
 wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
@@ -136,7 +136,7 @@ vault policy write test2-ec2 test2-ec2-policy.hcl
 
 # Test3 - Vault database secrets engine
 echo "Waiting for RDS to be available..."
-while ! mysql -h "${rds_endpoint}" -u "${rds_username}" -p"${rds_password}" -e "SELECT 1;" &>/dev/null; do
+while ! mysql -h "${rds_endpoint}" -P 3306 -u "${rds_username}" -p"${rds_password}" -e "SELECT 1;" &>/dev/null; do
   echo "RDS is not yet available. Retrying in 10 seconds..."
   sleep 10
 done
